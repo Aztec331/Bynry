@@ -1,0 +1,158 @@
+Part 1: Code Review & Debugging (30 minutes)
+
+A previous intern wrote this API endpoint for adding new products. **Something is wrong** - the code compiles but doesn't work as expected in production.
+
+@app.route('/api/products', methods=['POST'])
+
+def create_product():
+
+data = request.json
+
+# Create new product
+
+product = Product(
+
+name=data['name'],
+
+sku=data['sku'],
+
+price=data['price'],
+
+warehouse_id=data['warehouse_id']
+
+)
+
+db.session.add(product)
+
+db.session.commit()
+
+# Update inventory count
+
+inventory = Inventory(
+
+product_id=product.id,
+
+warehouse_id=data['warehouse_id'],
+
+quantity=data['initial_quantity']
+
+)
+
+db.session.add(inventory)
+
+db.session.commit()
+
+return {"message": "Product created", "product_id": product.id}
+
+**Your Tasks:**
+
+1. **Identify Issues**: List all problems you see with this code (technical and business logic)
+2. **Explain Impact**: For each issue, explain what could go wrong in production
+3. **Provide Fixes**: Write the corrected version with explanations
+
+**Additional Context (you may need to ask for more):**
+
+- Products can exist in multiple warehouses
+- SKUs must be unique across the platform
+- Price can be decimal values
+- Some fields might be optional
+
+ISSUES FOUND:
+
+1. One warehouse has multiple inventory records, each inventory record holds one product, and that record stores the quantity of that product.
+
+DIAGRAM:
+
+Warehouse
+├── Inventory (Product A, qty 10)
+├── Inventory (Product B, qty 5)
+└── Inventory (Product C, qty 0)
+
+Product A
+├── Inventory (Warehouse 1, qty 10)
+└── Inventory (Warehouse 2, qty 7)
+
+1. The system allows multiple products to be created with the same SKU, even though SKU should uniquely identify a product.
+
+DIAGRAM:
+
+Product A ── SKU: ABC123
+Product B ── SKU: ABC123   ❌
+
+Product A ── SKU: ABC123
+Product B ── SKU: XYZ789  ✅
+
+1. No transaction safety (double commit), Product and Inventory are saved using two separate database commits.
+
+Create Product  ✅ (committed)
+Create Inventory ❌ (failed)
+
+Result → Product exists without inventory ❌
+
+Create Product
+Create Inventory
+Commit once (together) ✅
+
+Related database operations must succeed or fail together.
+
+1. No input validation, The API blindly trusts incoming data without checking required fields or values.
+
+WRONG:
+
+price: -100
+initial_quantity: "abc"
+name: null
+
+RIGHT:
+
+price ≥ 0
+quantity ≥ 0
+name required
+
+Never trust client input — always validate before saving.
+
+1. Price precision issue (float vs decimal),The API stores price using floating-point numbers, which causes rounding errors for money values.
+
+0.1 + 0.2
+= 0.30000000000000004 ❌
+
+0.1 + 0.2
+= 0.3 ✅
+
+### ✅ Solution
+
+- **API:** Accept price as a number (JSON)
+- **Backend:** Convert price to `Decimal`
+- **Database:** Store price as `DECIMAL(10,2)`
+
+JSON price → Decimal("99.99") → DECIMAL(10,2)
+
+Always store money using decimal, never float.
+
+1. No error handling in the API,The API assumes everything will work and does not handle database or logic errors.
+
+DB error occurs
+→ API crashes
+→ 500 Internal Server Error ❌
+
+DB error occurs
+→ Catch error
+→ Return meaningful response (400 / 409) ✅
+
+### ✅ Solution
+
+- Wrap database operations in `try / except`
+- Handle:
+    - duplicate SKU
+    - invalid data
+    - database failures
+- Return clear error messages
+
+try:
+save data
+except:
+return error response
+
+APIs must fail gracefully, not crash.
+
+1. Optional fields are not handled safely, The API assumes all fields exist in the request, even though some fields are optional.

@@ -1,0 +1,189 @@
+Part 2: Database Design – Inventory Management System (StockFlow)
+1. Database Schema Design
+1.1 Company
+
+Represents a business using the StockFlow platform.
+
+Table: companies_company
+
+id (PK, bigint)
+
+name (varchar, unique)
+
+created_at (timestamp)
+
+Reasoning
+
+Company is the root entity.
+
+All warehouses, products, and suppliers belong to a company.
+
+1.2 Warehouse
+
+Represents physical storage locations owned by a company.
+
+Table: inventory_warehouse
+
+id (PK, bigint)
+
+company_id (FK → Company.id)
+
+name (varchar)
+
+location (varchar, nullable)
+
+Constraints
+
+Unique (company_id, name)
+
+Reasoning
+
+A company can have multiple warehouses.
+
+Warehouse names are unique only within a company.
+
+1.3 Product
+
+Represents products managed by a company.
+
+Table: products_product
+
+id (PK, bigint)
+
+company_id (FK → Company.id)
+
+name (varchar)
+
+sku (varchar, unique)
+
+price (decimal)
+
+product_type (enum / varchar)
+
+low_stock_threshold (int)
+
+has_recent_sales (boolean)
+
+daily_sales_rate (float)
+
+Reasoning
+
+SKU must be globally unique.
+
+Decimal price ensures financial accuracy.
+
+Product type and threshold support low-stock logic.
+
+Sales fields are required for alert calculations.
+
+1.4 Inventory
+
+Tracks stock of a product in a specific warehouse.
+
+Table: inventory_inventory
+
+id (PK, bigint)
+
+product_id (FK → Product.id)
+
+warehouse_id (FK → Warehouse.id)
+
+quantity (int)
+
+Constraints
+
+Unique (product_id, warehouse_id)
+
+Reasoning
+
+Products can exist in multiple warehouses.
+
+Inventory is modeled as a join table between Product and Warehouse.
+
+1.5 Inventory Change (History)
+
+Tracks changes in inventory levels.
+
+Table: inventory_inventorychange
+
+id (PK, bigint)
+
+inventory_id (FK → Inventory.id)
+
+change (int)
+
+reason (varchar)
+
+created_at (timestamp)
+
+Reasoning
+
+Required to track inventory movements.
+
+Useful for auditing and analytics.
+
+1.6 Supplier
+
+Represents suppliers that provide products to companies.
+
+Table: suppliers_supplier
+
+id (PK, bigint)
+
+company_id (FK → Company.id)
+
+name (varchar)
+
+contact_email (varchar)
+
+Reasoning
+
+Suppliers are company-specific.
+
+Contact details are required for reordering.
+
+1.7 Product–Supplier Mapping
+
+Defines which suppliers provide which products.
+
+Table: suppliers_productsupplier
+
+id (PK, bigint)
+
+product_id (FK → Product.id)
+
+supplier_id (FK → Supplier.id)
+
+Constraints
+
+Unique (product_id, supplier_id)
+
+Reasoning
+
+Many-to-many relationship.
+
+A product can have multiple suppliers.
+
+1.8 Product Bundles
+
+Supports bundled products composed of other products.
+
+Table: products_productbundle
+
+id (PK, bigint)
+
+bundle_id (FK → Product.id)
+
+item_id (FK → Product.id)
+
+quantity (int)
+
+Constraints
+
+Unique (bundle_id, item_id)
+
+Reasoning
+
+Allows defining composite products.
+
+Self-referential relationship on Product.
