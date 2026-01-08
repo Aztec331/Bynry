@@ -1,0 +1,81 @@
+Part 3 - Psuedocode for API 
+
+GET /api/companies/{company_id}/alerts/low-stock
+
+FUNCTION getLowStockAlerts(company_id):
+
+    alerts = empty list
+
+    // Step 1: Fetch inventory records for the company
+    inventory_records = SELECT Inventory
+                         JOIN Product
+                         JOIN Warehouse
+                         WHERE Warehouse.company_id = company_id
+                         AND Product.has_recent_sales = true
+
+    // Step 2: Iterate through inventory records
+    FOR each inventory_record IN inventory_records:
+
+        product = inventory_record.product
+        warehouse = inventory_record.warehouse
+
+        // Step 3: Check low stock condition
+        IF inventory_record.quantity < product.low_stock_threshold:
+
+            // Step 4: Calculate days until stockout
+            IF product.daily_sales_rate > 0:
+                days_until_stockout =
+                    inventory_record.quantity / product.daily_sales_rate
+            ELSE:
+                days_until_stockout = null
+
+            // Step 5: Fetch supplier info (first supplier assumed)
+            supplier = SELECT Supplier
+                       JOIN ProductSupplier
+                       WHERE ProductSupplier.product_id = product.id
+                       LIMIT 1
+
+            // Step 6: Build alert object
+            alert = {
+                product_id: product.id,
+                product_name: product.name,
+                sku: product.sku,
+                warehouse_id: warehouse.id,
+                warehouse_name: warehouse.name,
+                current_stock: inventory_record.quantity,
+                threshold: product.low_stock_threshold,
+                days_until_stockout: days_until_stockout,
+                supplier: {
+                    id: supplier.id,
+                    name: supplier.name,
+                    contact_email: supplier.contact_email
+                }
+            }
+
+            ADD alert TO alerts
+
+    // Step 7: Return response
+    RETURN {
+        alerts: alerts,
+        total_alerts: COUNT(alerts)
+    }
+
+Edge Cases Considered
+
+Product has no recent sales → excluded
+
+daily_sales_rate = 0 → stockout days set to null
+
+Product has no supplier → supplier field can be null
+
+Multiple warehouses handled independently
+
+Assumptions
+
+Recent sales activity is precomputed (has_recent_sales)
+
+Low-stock threshold is stored per product
+
+One primary supplier is sufficient for alerts
+
+Sales rate is an average value
